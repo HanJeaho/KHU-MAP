@@ -1,12 +1,13 @@
 // firebase-config.js
-// ⚠️ 이 파일은 .gitignore에 추가하세요
-// GitHub에 올리지 마세요
+// KHU-MAP Firebase 설정 파일
+// GitHub에 올려도 되지만 API 키 도메인 제한 필수!
 
 window.FIREBASE_CONFIG = {
-  apiKey: "AIzaSyB4ka21mFE7avHmDLiOrOqM5LPLe4anUJo",
-  authDomain: "khu-map.firebaseapp.com",
-  projectId: "khu-map",
-  storageBucket: "khu-map.firebasestorage.app",
-  messagingSenderId: "750025397742",
-  appId: "1:750025397742:web:7380637d7da93ee8a7aaff"
+  apiKey: "AIzaSyCTIW22H7P-t7nFZIX3wlRDSJ5qy2buj3Y",
+  authDomain: "khu-1fec1.firebaseapp.com",
+  projectId: "khu-1fec1",
+  storageBucket: "khu-1fec1.firebasestorage.app",
+  messagingSenderId: "533299882883",
+  appId: "1:533299882883:web:ca9908a540911451e724b6",
+  measurementId: "G-MG1PJX99DK"
 };
