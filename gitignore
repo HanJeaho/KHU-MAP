@@ -1,0 +1,8 @@
+# Firebase 설정 파일 — API 키 포함, 절대 GitHub에 올리지 마세요
+firebase-config.js
+
+# 기타 민감한 파일
+*.env
+.env.local
+secrets.js
+config.local.js
