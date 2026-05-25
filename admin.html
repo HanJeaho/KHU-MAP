@@ -125,9 +125,9 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
 .fitem-del:hover { opacity: 1 !important; }
 
 /* ── Map ── */
-.map-area { flex: 1; overflow: hidden; position: relative; background: #e8e0d4; }
-.map-wrap { position: relative; width: 100%; height: 100%; overflow: hidden; }
-.map-wrap img { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }
+.map-area { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; background: var(--bg); }
+.map-wrap { position: relative; width: 100%; overflow: hidden; padding-top: 4%; background: var(--bg); }
+.map-wrap img { width: 100%; display: block; pointer-events: none; }
 .marker {
   position: absolute; transform: translate(-50%, -50%);
   cursor: grab; z-index: 10;
@@ -257,6 +257,20 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
 .add-box h2 { font-size: 17px; font-weight: 700; margin-bottom: 18px; }
 .add-box .form-group { margin-bottom: 10px; }
 .add-box .save-btn { width: 100%; margin-top: 8px; }
+
+  /* ── Auth Guard ── */
+  #authGuard {
+    position: fixed; inset: 0; background: var(--crimson);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 99999; transition: opacity 0.3s;
+  }
+  #authGuard.hidden { opacity: 0; pointer-events: none; }
+  .auth-spinner {
+    width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.3);
+    border-top-color: #fff; border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -421,15 +435,44 @@ import { getFirestore, doc, getDoc, setDoc, collection, getDocs, orderBy, query,
 // ── Firebase Init ────────────────────────────────────────────────
 // Firebase config는 window.FIREBASE_CONFIG에서 로드
 // firebase-config.js 파일을 로컬에만 보관하고 GitHub에는 올리지 마세요
-const firebaseConfig = (typeof window.FIREBASE_CONFIG !== 'undefined')
-  ? window.FIREBASE_CONFIG
-  : (() => { document.getElementById('loginErr').textContent = 'firebase-config.js 파일이 없습니다.'; throw new Error('Config missing'); })();
-const app  = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db   = getFirestore(app);
+let app, auth, db;
+try {
+  const firebaseConfig = window.FIREBASE_CONFIG;
+  if (!firebaseConfig) throw new Error('firebase-config.js 파일이 없거나 로드되지 않았습니다.');
+  app  = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db   = getFirestore(app);
+} catch(e) {
+  console.error('Firebase 초기화 실패:', e.message);
+  // authGuard 즉시 제거하고 로그인 화면 표시
+  setTimeout(() => {
+    const guard = document.getElementById('authGuard');
+    if (guard) guard.remove();
+    const loginScreen = document.getElementById('loginScreen');
+    if (loginScreen) loginScreen.style.display = 'flex';
+    const err = document.getElementById('loginErr');
+    if (err) err.textContent = 'Firebase 연결 오류: firebase-config.js를 확인하세요.';
+  }, 100);
+}
 
 // ── Auth ─────────────────────────────────────────────────────────
+// 타임아웃 안전장치: Firebase가 3초 내 응답 없으면 로그인 화면 표시
+const guardTimeout = setTimeout(() => {
+  const guard = document.getElementById('authGuard');
+  if (guard) {
+    guard.classList.add('hidden');
+    setTimeout(() => guard && guard.remove(), 300);
+    document.getElementById('loginScreen').style.display = 'flex';
+  }
+}, 3000);
+
 onAuthStateChanged(auth, user => {
+  clearTimeout(guardTimeout);
+  const guard = document.getElementById('authGuard');
+  if (guard) {
+    guard.classList.add('hidden');
+    setTimeout(() => guard && guard.remove(), 300);
+  }
   if (user) {
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('userBadge').textContent = user.email;
@@ -508,18 +551,27 @@ const SEED_DATA = [{ id:'emart24', type:'convenience', brand:'emart24', name:'�
   { id:'bank_atm', type:'bank', name:'하나은행', loc:'우정원 내', desc:'우정원 내 하나은행. ATM 기기 보유.', x:63.1, y:10.1, emoji:'🏦', badgeStyle:'background:#E8F5E9;color:#2E7D32' },];
 
 async function loadFacilities() {
+  // 1. 즉시 SEED_DATA로 아이콘 표시 (Firebase 응답 전에도 보임)
+  facilities = [...SEED_DATA];
+  renderList();
+  renderMarkers();
+
+  // 2. Firebase에서 최신 데이터 불러오기
   try {
     const snap = await getDoc(doc(db, 'khumap', 'facilities'));
     if (snap.exists()) {
       facilities = snap.data().items || [];
     } else {
-      facilities = SEED_DATA;
+      // 첫 실행: SEED_DATA를 Firebase에 저장
       await setDoc(doc(db, 'khumap', 'facilities'), { items: facilities });
     }
     renderList();
     renderMarkers();
-    showToast('데이터 로드 완료', 'success');
-  } catch(e) { showToast('로드 실패: ' + e.message, 'error'); }
+    showToast('데이터 로드 완료 ✓', 'success');
+  } catch(e) {
+    showToast('Firebase 연결 실패 — 로컬 데이터로 표시 중', 'error');
+    console.warn('Firebase 오류:', e.message);
+  }
 }
 
 // 자동저장: 데이터만 저장, 기록 남기지 않음
