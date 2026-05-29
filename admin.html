@@ -280,8 +280,8 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
   <div class="login-box">
     <div class="login-logo">KHU MAP</div>
     <div class="login-title">관리자 로그인</div>
-    <input type="email" id="loginEmail" placeholder="이메일" />
-    <input type="password" id="loginPw" placeholder="비밀번호" onkeydown="if(event.key==='Enter')doLogin()" />
+    <input type="email" id="loginEmail" placeholder="이메일" autocomplete="off" />
+    <input type="password" id="loginPw" placeholder="비밀번호" autocomplete="new-password" onkeydown="if(event.key==='Enter')doLogin()" />
     <button class="login-btn" onclick="doLogin()">로그인</button>
     <div class="login-err" id="loginErr"></div>
   </div>
@@ -435,23 +435,29 @@ import { getFirestore, doc, getDoc, setDoc, collection, getDocs, orderBy, query,
 // ── Firebase Init ────────────────────────────────────────────────
 // Firebase config는 window.FIREBASE_CONFIG에서 로드
 // firebase-config.js 파일을 로컬에만 보관하고 GitHub에는 올리지 마세요
+// Firebase config 직접 내장 (firebase-config.js 로드 실패 대비)
+const FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
+  apiKey: "AIzaSyCTIW22H7P-t7nFZIX3wlRDSJ5qy2buj3Y",
+  authDomain: "khu-1fec1.firebaseapp.com",
+  projectId: "khu-1fec1",
+  storageBucket: "khu-1fec1.firebasestorage.app",
+  messagingSenderId: "533299882883",
+  appId: "1:533299882883:web:ca9908a540911451e724b6",
+  measurementId: "G-MG1PJX99DK"
+};
+
 let app, auth, db;
 try {
-  const firebaseConfig = window.FIREBASE_CONFIG;
-  if (!firebaseConfig) throw new Error('firebase-config.js 파일이 없거나 로드되지 않았습니다.');
-  app  = initializeApp(firebaseConfig);
+  app  = initializeApp(FIREBASE_CONFIG);
   auth = getAuth(app);
   db   = getFirestore(app);
 } catch(e) {
   console.error('Firebase 초기화 실패:', e.message);
-  // authGuard 즉시 제거하고 로그인 화면 표시
   setTimeout(() => {
     const guard = document.getElementById('authGuard');
     if (guard) guard.remove();
-    const loginScreen = document.getElementById('loginScreen');
-    if (loginScreen) loginScreen.style.display = 'flex';
-    const err = document.getElementById('loginErr');
-    if (err) err.textContent = 'Firebase 연결 오류: firebase-config.js를 확인하세요.';
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('loginErr').textContent = 'Firebase 초기화 실패: ' + e.message;
   }, 100);
 }
 
@@ -502,6 +508,7 @@ async function doLogin() {
   try {
     await signInWithEmailAndPassword(auth, email, pw);
     loginAttempts = 0;
+    document.getElementById('loginPw').value = '';
   } catch(e) {
     loginAttempts++;
     if (loginAttempts >= 5) {
@@ -522,6 +529,10 @@ async function doLogout() {
   await signOut(auth);
   document.getElementById('mainTopbar').style.display = 'none';
   document.getElementById('mainLayout').style.display = 'none';
+  // 로그인 필드 초기화
+  document.getElementById('loginEmail').value = '';
+  document.getElementById('loginPw').value = '';
+  document.getElementById('loginErr').textContent = '';
 }
 window.doLogout = doLogout;
 
