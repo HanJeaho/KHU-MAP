@@ -280,8 +280,8 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
   <div class="login-box">
     <div class="login-logo">KHU MAP</div>
     <div class="login-title">관리자 로그인</div>
-    <input type="email" id="loginEmail" placeholder="이메일" />
-    <input type="password" id="loginPw" placeholder="비밀번호" onkeydown="if(event.key==='Enter')doLogin()" />
+    <input type="email" id="loginEmail" placeholder="이메일" autocomplete="off" />
+    <input type="password" id="loginPw" placeholder="비밀번호" autocomplete="new-password" onkeydown="if(event.key==='Enter')doLogin()" />
     <button class="login-btn" onclick="doLogin()">로그인</button>
     <div class="login-err" id="loginErr"></div>
   </div>
@@ -297,6 +297,7 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
   </div>
   <div class="topbar-right">
     <div class="user-badge" id="userBadge">—</div>
+    <button class="tb-btn tb-btn-outline" id="undoBtn" onclick="doUndo()" style="opacity:0.4;cursor:not-allowed;" disabled>↩ 되돌리기</button>
     <button class="tb-btn tb-btn-outline" onclick="openHistory()">📋 변경 기록</button>
     <button class="tb-btn tb-btn-gold" onclick="publishChanges()">🚀 게시 반영</button>
     <button class="tb-btn tb-btn-outline" onclick="doLogout()">로그아웃</button>
@@ -435,23 +436,29 @@ import { getFirestore, doc, getDoc, setDoc, collection, getDocs, orderBy, query,
 // ── Firebase Init ────────────────────────────────────────────────
 // Firebase config는 window.FIREBASE_CONFIG에서 로드
 // firebase-config.js 파일을 로컬에만 보관하고 GitHub에는 올리지 마세요
+// Firebase config 직접 내장 (firebase-config.js 로드 실패 대비)
+const FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
+  apiKey: "AIzaSyCTIW22H7P-t7nFZIX3wlRDSJ5qy2buj3Y",
+  authDomain: "khu-1fec1.firebaseapp.com",
+  projectId: "khu-1fec1",
+  storageBucket: "khu-1fec1.firebasestorage.app",
+  messagingSenderId: "533299882883",
+  appId: "1:533299882883:web:ca9908a540911451e724b6",
+  measurementId: "G-MG1PJX99DK"
+};
+
 let app, auth, db;
 try {
-  const firebaseConfig = window.FIREBASE_CONFIG;
-  if (!firebaseConfig) throw new Error('firebase-config.js 파일이 없거나 로드되지 않았습니다.');
-  app  = initializeApp(firebaseConfig);
+  app  = initializeApp(FIREBASE_CONFIG);
   auth = getAuth(app);
   db   = getFirestore(app);
 } catch(e) {
   console.error('Firebase 초기화 실패:', e.message);
-  // authGuard 즉시 제거하고 로그인 화면 표시
   setTimeout(() => {
     const guard = document.getElementById('authGuard');
     if (guard) guard.remove();
-    const loginScreen = document.getElementById('loginScreen');
-    if (loginScreen) loginScreen.style.display = 'flex';
-    const err = document.getElementById('loginErr');
-    if (err) err.textContent = 'Firebase 연결 오류: firebase-config.js를 확인하세요.';
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('loginErr').textContent = 'Firebase 초기화 실패: ' + e.message;
   }, 100);
 }
 
@@ -502,6 +509,7 @@ async function doLogin() {
   try {
     await signInWithEmailAndPassword(auth, email, pw);
     loginAttempts = 0;
+    document.getElementById('loginPw').value = '';
   } catch(e) {
     loginAttempts++;
     if (loginAttempts >= 5) {
@@ -522,6 +530,10 @@ async function doLogout() {
   await signOut(auth);
   document.getElementById('mainTopbar').style.display = 'none';
   document.getElementById('mainLayout').style.display = 'none';
+  // 로그인 필드 초기화
+  document.getElementById('loginEmail').value = '';
+  document.getElementById('loginPw').value = '';
+  document.getElementById('loginErr').textContent = '';
 }
 window.doLogout = doLogout;
 
@@ -591,7 +603,7 @@ async function loadFacilities() {
       facilities = snap.data().items || [];
     } else {
       // 첫 실행: SEED_DATA를 Firebase에 저장
-      await setDoc(doc(db, 'khumap', 'facilities'), { items: facilities });
+      await setDoc(doc(db, 'khumap', 'facilities'), { items: cleanData(facilities) });
     }
     renderList();
     renderMarkers();
@@ -602,10 +614,15 @@ async function loadFacilities() {
   }
 }
 
+// undefined 필드 제거 (Firestore는 undefined 미지원)
+function cleanData(items) {
+  return JSON.parse(JSON.stringify(items, (k, v) => v === undefined ? null : v));
+}
+
 // 자동저장: 데이터만 저장, 기록 남기지 않음
 async function autoSave() {
   try {
-    await setDoc(doc(db, 'khumap', 'facilities'), { items: facilities });
+    await setDoc(doc(db, 'khumap', 'facilities'), { items: cleanData(facilities) });
   } catch(e) { console.warn('자동저장 실패:', e.message); }
 }
 
@@ -615,7 +632,7 @@ async function saveHistory(note) {
     const ts = new Date().toISOString();
     const vId = ts.replace(/[:.]/g, '-');
     await setDoc(doc(db, 'khumap_versions', vId), {
-      items: facilities, savedAt: ts,
+      items: cleanData(facilities), savedAt: ts,
       savedBy: auth.currentUser?.email || '—',
       note: note || '게시 반영', count: facilities.length
     });
@@ -675,6 +692,7 @@ window.selectItem = selectItem;
 
 function quickDelete(id) {
   if (!confirm('삭제할까요?')) return;
+  pushUndo('삭제 전: ' + (facilities.find(f=>f.id===id)?.name||id));
   facilities = facilities.filter(f => f.id !== id);
   if (selectedId === id) {
     selectedId = null;
@@ -701,6 +719,7 @@ function saveItem() {
     y: parseFloat(document.getElementById('fY').value) || 50,
     emoji: '📍', badgeStyle: badgeStyle(document.getElementById('fType').value),
   };
+  pushUndo('수정 전: ' + updated.name);
   const idx = facilities.findIndex(f => f.id === id);
   if (idx >= 0) facilities[idx] = { ...facilities[idx], ...updated };
   else facilities.push(updated);
@@ -779,6 +798,53 @@ function iconInner(f) {
   return `<div style="width:100%;height:100%;border-radius:50%;background:#888;display:flex;align-items:center;justify-content:center;font-size:20px;">${f.emoji}</div>`;
 }
 
+// ── Undo Stack ───────────────────────────────────────────────────
+const undoStack = [];
+const MAX_UNDO = 20;
+
+function pushUndo(label) {
+  undoStack.push({ label, snapshot: JSON.parse(JSON.stringify(facilities)) });
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  updateUndoBtn();
+}
+
+function updateUndoBtn() {
+  const btn = document.getElementById('undoBtn');
+  if (!btn) return;
+  if (undoStack.length > 0) {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.style.cursor = 'pointer';
+    btn.textContent = `↩ 되돌리기 (${undoStack.length})`;
+  } else {
+    btn.disabled = true;
+    btn.style.opacity = '0.4';
+    btn.style.cursor = 'not-allowed';
+    btn.textContent = '↩ 되돌리기';
+  }
+}
+
+function doUndo() {
+  if (!undoStack.length) return;
+  const prev = undoStack.pop();
+  facilities = prev.snapshot;
+  renderList();
+  renderMarkers();
+  if (selectedId) selectItem(selectedId);
+  autoSave();
+  showToast(`↩ 되돌림: ${prev.label}`, 'success');
+  updateUndoBtn();
+}
+window.doUndo = doUndo;
+
+// Ctrl+Z 단축키
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+    e.preventDefault();
+    doUndo();
+  }
+});
+
 function markerIcon(f) { return iconInner(f); }
 
 function renderMarkers() {
@@ -821,7 +887,7 @@ function attachMarkerDrag(el) {
     if (!active) return; active=false;
     el.classList.remove('dragging');
     const f=facilities.find(f=>f.id===el.dataset.id);
-    if (f) saveFacilities('위치이동: '+f.name);
+    if (f) { pushUndo('이동 전: '+f.name); autoSave(); }
   });
 }
 
@@ -832,7 +898,7 @@ async function publishChanges() {
     const now = new Date().toISOString();
     const user = auth.currentUser?.email || '—';
     // 1. 데이터 저장
-    await setDoc(doc(db, 'khumap', 'facilities'), { items: facilities });
+    await setDoc(doc(db, 'khumap', 'facilities'), { items: cleanData(facilities) });
     // 2. 변경 기록 저장
     await saveHistory('게시 반영 by ' + user);
     // 3. 공개 페이지에 반영
