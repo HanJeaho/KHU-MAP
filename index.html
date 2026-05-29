@@ -446,7 +446,7 @@ try {
     const app = initializeApp(cfg);
     const db  = getFirestore(app);
     // Listen for realtime updates from admin publish
-    onSnapshot(doc(db, 'khumap', 'published'), snap => {
+    onSnapshot(doc(db, 'khumap', 'facilities'), snap => {
       if (!snap.exists()) return;
       const data = snap.data().items;
       if (!data || !data.length) return;
