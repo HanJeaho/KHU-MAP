@@ -288,7 +288,7 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
 </div>
 
 <!-- Top Bar -->
-<div class="topbar">
+<div class="topbar" id="mainTopbar" style="display:none;">
   <div class="topbar-left">
     <div>
       <div class="topbar-title">🗺 KHU Map 관리자</div>
@@ -304,7 +304,7 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
 </div>
 
 <!-- Main Layout -->
-<div class="layout">
+<div class="layout" id="mainLayout" style="display:none;">
 
   <!-- Left: Facility List -->
   <div class="left-panel">
@@ -474,27 +474,55 @@ onAuthStateChanged(auth, user => {
     setTimeout(() => guard && guard.remove(), 300);
   }
   if (user) {
+    // 인증 완료 — 관리자 화면 표시
     document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('mainTopbar').style.display = 'flex';
+    document.getElementById('mainLayout').style.display = 'flex';
     document.getElementById('userBadge').textContent = user.email;
     loadFacilities();
   } else {
+    // 미인증 — 로그인 화면만 표시, 나머지 숨김
     document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('mainTopbar').style.display = 'none';
+    document.getElementById('mainLayout').style.display = 'none';
   }
 });
 
+let loginAttempts = 0;
+let loginBlocked = false;
+
 async function doLogin() {
+  if (loginBlocked) {
+    document.getElementById('loginErr').textContent = '⛔ 로그인 시도 횟수 초과. 5분 후 다시 시도하세요.';
+    return;
+  }
   const email = document.getElementById('loginEmail').value.trim();
   const pw    = document.getElementById('loginPw').value;
   document.getElementById('loginErr').textContent = '';
   try {
     await signInWithEmailAndPassword(auth, email, pw);
+    loginAttempts = 0;
   } catch(e) {
-    document.getElementById('loginErr').textContent = '로그인 실패: 이메일/비밀번호를 확인하세요.';
+    loginAttempts++;
+    if (loginAttempts >= 5) {
+      loginBlocked = true;
+      document.getElementById('loginErr').textContent = '⛔ 로그인 5회 실패. 5분간 차단됩니다.';
+      setTimeout(() => {
+        loginBlocked = false; loginAttempts = 0;
+        document.getElementById('loginErr').textContent = '차단 해제됨. 다시 시도하세요.';
+      }, 5 * 60 * 1000);
+    } else {
+      document.getElementById('loginErr').textContent = `로그인 실패 (${loginAttempts}/5회): 이메일/비밀번호를 확인하세요.`;
+    }
   }
 }
 window.doLogin = doLogin;
 
-async function doLogout() { await signOut(auth); }
+async function doLogout() {
+  await signOut(auth);
+  document.getElementById('mainTopbar').style.display = 'none';
+  document.getElementById('mainLayout').style.display = 'none';
+}
 window.doLogout = doLogout;
 
 // ── Data ─────────────────────────────────────────────────────────
